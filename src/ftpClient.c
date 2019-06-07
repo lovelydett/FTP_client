@@ -3,9 +3,11 @@
 #include	<stdlib.h>
 #include	<netdb.h>	/* getservbyname(), gethostbyname() */
 #include	<errno.h>	/* for definition of errno */
-
+#include 	<fcntl.h>	//@tt:for file operates
+#include 	<string.h>
 //@tt: for use of select()
 #include    <sys/select.h>  
+
 
 /* define macros*/
 #define MAXBUF	1024
@@ -20,22 +22,25 @@
 #define CLOSEDATA	226
 #define ACTIONOK	250
 
+enum {LS,GET,PUT}nextCmdMode;
+
 /* Define global variables */
 char	*host;		/* hostname or dotted-decimal string */
-char	*port;
+int		port;
 char	*rbuf, *rbuf1;		/* pointer that is malloc'ed */
 char	*wbuf, *wbuf1;		/* pointer that is malloc'ed */
-struct sockaddr_in	servaddr;
+struct sockaddr_in	servaddr;//@tt:server's socket address 
+int nRet = 0;
+char *fileName;
 
-int	    cliopen(char *host, char *port);
-void    strtosrv(char *str, char *host, char *port);
+int	    cliopen(char *host, int port);
+int     strtosrv(char *str, char *host);//@tt:ip stored in host and port returned
 void	cmd_tcp(int sockfd);
 void	ftp_list(int sockfd);
 int	    ftp_get(int sck, char *pDownloadFileName_s);
 int	    ftp_put (int sck, char *pUploadFileName_s);
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int	fd;
 
@@ -47,27 +52,33 @@ main(int argc, char *argv[])
 	}
 
 	host = argv[1];
-	port = "21";
+	port = 21;
 
 	
 	//1. code here: Allocate the read and write buffers before open().
     //@tt: allocate buffer for rbuf, wbuf... etc
-
-
+	rbuf = (char*)malloc(MAXBUF);
+	wbuf = (char*)malloc(MAXBUF);
+	rbuf1 = (char*)malloc(MAXBUF);
+	wbuf1 = (char*)malloc(MAXBUF);
+	fileName = (char*)malloc(MAXBUF);
 
 	fd = cliopen(host, port);
-
 	cmd_tcp(fd);
+	free(rbuf);
+	free(rbuf1);
+	free(wbuf);
+	free(wbuf1);
+	free(fileName);
 
 	exit(0);
 }
 
 
 //@tt: establish a tcp connection at host:port
-int cliopen(char *host, char *port_c)
+int cliopen(char *host, int port)
 {
     printf("\n----------tcp connection establishing---------- \n");
-	int port = atoi(port_c);
     int socketCmd;
 	if((socketCmd = socket(AF_INET,SOCK_STREAM,0))<0);//@tt: open socket for cmd and get socketID
     {
@@ -83,7 +94,15 @@ int cliopen(char *host, char *port_c)
     }
     memset(&servaddr,0,sizeof(struct sockaddr_in));//@tt: clear servaddr
     memcpy(&servaddr.sin_addr.s_addr,(struct in_addr*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
-    
+    servaddr.sin_port = htons(port);//@tt:transfer to big-endian
+	servaddr.sin_family = AF_INET;
+	nRet = connect(socketCmd,&servaddr,sizeof(servaddr));
+	if(0!=nRet)
+	{
+		printf("error in tcp connection: nRet = %d \n",nRet);
+		return -1;
+	}
+	return socketCmd;
 }
 
 
@@ -91,71 +110,93 @@ int cliopen(char *host, char *port_c)
    Compute server's port by a pair of integers and store it in char *port
    Get server's IP address and store it in char *host
 */
-void    strtosrv(char *str, char *host, char *port)
+int    strtosrv(char *str, char *host)
 {
-	/*************************************************************
-	//3. code here
-	*************************************************************/
+	unsigned int serverAdd[6];
+	sscanf(str,"%d,%d,%d,%d,%d,%d",&serverAdd[0],&serverAdd[1],&serverAdd[2],&serverAdd[3],&serverAdd[4],&serverAdd[5]);  
+	memset(host,0,strlen(host));
+	sprintf(host,"%d.%d.%d.%d",serverAdd[0],serverAdd[1],serverAdd[2],serverAdd[3]);
+	return serverAdd[4]*256 + serverAdd[5];
 }
 
 
 /* Read and write as command connection */
-void
-cmd_tcp(int sockfd)
+void cmd_tcp(int sockfd)
 {
 	int		maxfdp1, nread, nwrite, fd, replycode;
-	char		host[16];
-	char		port[6];
-	fd_set		rset;
+	char	host[16];
+	int		port;
+	fd_set	rset;
 
 	FD_ZERO(&rset);
 	maxfdp1 = sockfd + 1;	/* check descriptors [0..sockfd] */
 
-	for ( ; ; )
+	while(1)
 	{
-		FD_SET(STDIN_FILENO, &rset);
-		FD_SET(sockfd, &rset);
+		FD_SET(STDIN_FILENO, &rset);//@tt:stdin
+		FD_SET(sockfd, &rset);//@tt:socketCmd
 
-		if (select(maxfdp1, &rset, NULL, NULL, NULL) < 0)
-			printf("select error\n");
-			
+		nRet = select(maxfdp1, &rset, NULL, NULL, NULL);//@tt:check if rset(s) readable
+		if (0>=nRet)
+		{
+			printf("error: select error, nRet:%d\n",nRet);
+		}
 		/* data to read on stdin */
-		if (FD_ISSET(STDIN_FILENO, &rset)) {
+		if (FD_ISSET(STDIN_FILENO, &rset)) //@tt:if data readable in stdin
+		{
+			memset(rbuf,'\0',MAXBUF);
+			memset(wbuf,'\0',MAXBUF);
+			memset(wbuf1,'\0',MAXBUF);
 			if ( (nread = read(STDIN_FILENO, rbuf, MAXBUF)) < 0)
 				printf("read error from stdin\n");
 			nwrite = nread+5;
 
 			/* send username */
-			if (replycode == USERNAME) {
+			if (replycode == USERNAME) //@tt:read username from stdin and send to serverCMD
+			{
 				sprintf(wbuf, "USER %s", rbuf);
 				if (write(sockfd, wbuf, nwrite) != nwrite)
 					printf("write error\n");
 			}
 
+			if(replycode == PASSWORD) //@tt: read password from stdin and send to server
 			 /*************************************************************
 			 //4. code here: send password
 			 *************************************************************/
-
+			{
+				sprintf(wbuf, "PASS %s", rbuf);
+				if (write(sockfd, wbuf, nwrite) != nwrite)
+					printf("write error\n");
+			}
 
 			 /* send command */
 			if (replycode==LOGIN || replycode==CLOSEDATA || replycode==PATHNAME || replycode==ACTIONOK)
 			{
 				/* ls - list files and directories*/
-				if (strncmp(rbuf, "ls", 2) == 0) {
+				if (strncmp(rbuf, "ls", 2) == 0) 
+				{
 					sprintf(wbuf, "%s", "PASV\n");
-					write(sockfd, wbuf, 5);
+					write(sockfd, wbuf, 5);//@tt:send to server's cmdSock: PASV
 					sprintf(wbuf1, "%s", "LIST -al\n");
-					nwrite = 9;
+					nextCmdMode = LS;
 					continue;
 				}
 
 				/*************************************************************
 				// 5. code here: cd - change working directory/
 				*************************************************************/
-
+				if (strncmp(rbuf, "cd", 2) == 0) 
+				{
+					memset(fileName,'\0',strlen(fileName));
+					sscanf(rbuf,"cd %s",fileName);
+					sprintf(wbuf, "CWD %s", fileName);
+					write(sockfd, wbuf, nread);//@tt:send to server's cmdSock: CWD xxxxxx...
+					continue;
+				}
 
 				/* pwd -  print working directory */
-				if (strncmp(rbuf, "pwd", 3) == 0) {
+				if (strncmp(rbuf, "pwd", 3) == 0) 
+				{
 					sprintf(wbuf, "%s", "PWD\n");
 					write(sockfd, wbuf, 4);
 					continue;
@@ -164,19 +205,55 @@ cmd_tcp(int sockfd)
 				/*************************************************************
 				// 6. code here: quit - quit from ftp server
 				*************************************************************/
+				if (strncmp(rbuf, "quit", 4) == 0) 
+				{
+					sprintf(wbuf, "%s", "QUIT\n");
+					write(sockfd, wbuf, 5);
+					nRet = close(sockfd);
+					if(nRet<0)
+					{
+						printf("error: failed to close sock:%d\n",sockfd);
+					}
+					break;
+				}
 
 
 				/*************************************************************
 				// 7. code here: get - get file from ftp server
 				*************************************************************/
-
+				if (strncmp(rbuf, "get", 3) == 0) 
+				{
+					sprintf(wbuf, "%s", "PASV\n");
+					write(sockfd, wbuf, 5);
+					memset(fileName,'\0',strlen(fileName));
+					sscanf(rbuf,"get %s",fileName);
+					sprintf(wbuf1, "RETR %s", fileName);
+					write(sockfd,wbuf,5);//@tt:get connected in PASV mode
+					nextCmdMode = GET;
+					continue;
+				}
 
 				/*************************************************************
 				// 8. code here: put -  put file upto ftp server
 				*************************************************************/
+				if (strncmp(rbuf, "put", 3) == 0) 
+				{
+					sprintf(wbuf, "%s", "PASV\n");
+					write(sockfd, wbuf, 5);
+					memset(fileName,'\0',strlen(fileName));
+					sscanf(rbuf,"put %s",fileName);
+					sprintf(wbuf1, "STOR %s", fileName);//@tt:set next cmd line
+					write(sockfd,wbuf,5);//@tt:get connected in PASV mode
+					nextCmdMode = PUT;
+					continue;
+				}
 
-
-				write(sockfd, rbuf, nread);
+				else
+				{
+					printf("\n error: wrong cmd line. \n");
+					continue;
+				}
+				
 
 			}
 		}
@@ -201,12 +278,58 @@ cmd_tcp(int sockfd)
 
 			/* open data connection*/
 			if (strncmp(rbuf, "227", 3) == 0) {
-				strtosrv(rbuf, host, port);
+				port = strtosrv(rbuf, host);
 				fd = cliopen(host, port);
-				write(sockfd, wbuf1, nwrite);
+				switch (nextCmdMode)
+				{
+				case LS:
+					if(write(sockfd, wbuf1, strlen(wbuf1))!=strlen(wbuf1))
+					{
+						printf("error: failed to send cmd to serversock");
+					}
+					ftp_list(fd);
+					break;
+				case GET:
+					if(write(sockfd, wbuf1, strlen(wbuf1))!=strlen(wbuf1))
+					{
+						printf("error: failed to send cmd to serversock");
+					}
+					ftp_get(fd,fileName);
+					break;
+				case PUT:
+					if(write(sockfd, wbuf1, strlen(wbuf1))!=strlen(wbuf1))
+					{
+						printf("error: failed to send cmd to serversock");
+					}
+					ftp_put(fd,fileName);
+					break;				
+				default:
+					break;
+				}
 				nwrite = 0;
 			}
-
+			if(strncmp(rbuf,"331",3) == 0)
+			{
+				strcat(rbuf,"your password:");
+				nread += 16;
+ 				replycode = PASSWORD;
+			}
+			if(strncmp(rbuf,"230",3) == 0)
+			{
+ 				replycode = LOGIN;
+			}
+			if(strncmp(rbuf,"257",3) == 0)
+			{
+ 				replycode = PATHNAME;
+			}
+			if(strncmp(rbuf,"250",3) == 0)
+			{
+ 				replycode = ACTIONOK;
+			}
+			if(strncmp(rbuf,"226",3) == 0)
+			{
+ 				replycode = CLOSEDATA;
+			}
 			/* start data transfer */
 			if (write(STDOUT_FILENO, rbuf, nread) != nread)
 				printf("write error to stdout\n");
@@ -220,8 +343,7 @@ cmd_tcp(int sockfd)
 
 
 /* Read and write as data transfer connection */
-void
-ftp_list(int sockfd)
+void ftp_list(int sockfd)
 {
 	int		nread;
 
@@ -242,19 +364,91 @@ ftp_list(int sockfd)
 }
 
 /* download file from ftp server */
-int	
-ftp_get(int sck, char *pDownloadFileName_s)
+int	ftp_get(int sck, char *pDownloadFileName_s)
 {
+
 	/*************************************************************
 	// 10. code here
 	*************************************************************/
+	
+	int file_fd = open(pDownloadFileName_s,O_WRONLY|O_CREAT|O_TRUNC);//@tt:open file ready to write in
+	if(-1 == file_fd)
+	{
+		printf("error: file open failed, unable to get file from server");
+		return -1;
+	}
+	memset(rbuf1,0,sizeof(rbuf1));
+	int readCount;
+	while(1)
+	{
+		readCount = recv(sck,rbuf1,MAXBUF,0);
+		if(0 == readCount)
+		{
+			printf("reading finished");
+			break;
+		}
+		if(0>readCount)
+		{
+			printf("error: unable to read from sck:%d\n",sck);
+			continue;
+		}
+		nRet = write(file_fd,rbuf1,readCount);
+		if(nRet!=readCount)
+		{
+			printf("error: failed to write to file:%s\n",pDownloadFileName_s);
+			return -1;
+		}
+	}
+	//@tt: get file finished
+	nRet = close(sck);
+	if(0>nRet)
+	{
+		printf("error: failed to close socket, nRet:%d\n",nRet);
+		return -1;
+	}
+	return 0;
 }
 
 /* upload file to ftp server */
-int 
-ftp_put (int sck, char *pUploadFileName_s)
+int ftp_put (int sck, char *pUploadFileName_s)
 {
 	/*************************************************************
 	// 11. code here
 	*************************************************************/
+	int file_fd = open(pUploadFileName_s,O_RDONLY);//@tt:open file ready to write in
+	if(-1 == file_fd)
+	{
+		printf("error: file open failed, unable to get file from server");
+		return -1;
+	}
+	memset(wbuf1,0,sizeof(wbuf1));
+	int readCount;
+	while(1)
+	{
+		readCount = read(file_fd,wbuf1,MAXBUF,0);
+		if(0 == readCount)
+		{
+			printf("reading finished from file:%s\n",pUploadFileName_s);
+			break;
+		}
+		if(0>readCount)
+		{
+			printf("error: unable to read from file:%s\n",pUploadFileName_s);
+			continue;
+		}
+		nRet = write(sck,wbuf1,readCount);
+		if(nRet!=readCount)
+		{
+			printf("error: failed to write to socket:%d\n",sck);
+			return -1;
+		}
+	}
+	//@tt: put file finished
+	nRet = close(sck);
+	if(0>nRet)
+	{
+		printf("error: failed to close socket, nRet:%d\n",nRet);
+		return -1;	
+	}
+	return 0;
 }
