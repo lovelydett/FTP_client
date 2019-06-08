@@ -5,8 +5,13 @@
 #include	<errno.h>	/* for definition of errno */
 #include 	<fcntl.h>	//@tt:for file operates
 #include 	<string.h>
+#include 	<limits.h>
 //@tt: for use of select()
 #include    <sys/select.h>  
+#include 	<sys/socket.h>
+#include 	<sys/types.h>
+#include 	<sys/stat.h>
+#include 	<sys/ioctl.h>
 
 
 /* define macros*/
@@ -43,7 +48,7 @@ int	    ftp_put (int sck, char *pUploadFileName_s);
 int main(int argc, char *argv[])
 {
 	int	fd;
-
+	nRet = socket(AF_INET,SOCK_STREAM,0);
     //@tt: to check if cmd includes ip
 	if (0 != argc-2)
 	{
@@ -64,6 +69,8 @@ int main(int argc, char *argv[])
 	fileName = (char*)malloc(MAXBUF);
 
 	fd = cliopen(host, port);
+	if(-1==fd)return -1;
+
 	cmd_tcp(fd);
 	free(rbuf);
 	free(rbuf1);
@@ -80,28 +87,36 @@ int cliopen(char *host, int port)
 {
     printf("\n----------tcp connection establishing---------- \n");
     int socketCmd;
-	if((socketCmd = socket(AF_INET,SOCK_STREAM,0))<0);//@tt: open socket for cmd and get socketID
+	if( -1==(socketCmd = socket(AF_INET,SOCK_STREAM,0)))//@tt: open socket for cmd and get socketID
     {
         printf("error: enable to open socket at: cliopen\n");
         return -1;
     }
     struct hostent *ht = NULL;//@tt: used for acquire servaddr
-    ht = gethostbyname(host);
+	char hostname[128];
+	hostname[127] = 0;
+    // if (gethostname(hostname, 128) == 0)
+    //     puts(hostname);
+    // else
+    //     perror("gethostname");
+	ht = gethostbyname(host);
     if(NULL == ht)
     {
         printf("error: enable to get host by name: %s at: cliopen\n",host);
         return -1;
     }
     memset(&servaddr,0,sizeof(struct sockaddr_in));//@tt: clear servaddr
-    memcpy(&servaddr.sin_addr.s_addr,(struct in_addr*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
+    //memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
+	memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
     servaddr.sin_port = htons(port);//@tt:transfer to big-endian
 	servaddr.sin_family = AF_INET;
-	nRet = connect(socketCmd,&servaddr,sizeof(servaddr));
+	nRet = connect(socketCmd,(struct sockaddr*)&servaddr,sizeof(servaddr));//@tt:force to transfer to sockaddr*
 	if(0!=nRet)
 	{
 		printf("error in tcp connection: nRet = %d \n",nRet);
 		return -1;
 	}
+	printf("\n----------tcp connection established---------- \n");
 	return socketCmd;
 }
 

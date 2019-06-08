@@ -1,0 +1,3 @@
+/home/tt/Documents/ftp_client/build/CMakeFiles/edit_cache.dir
+/home/tt/Documents/ftp_client/build/CMakeFiles/rebuild_cache.dir
+/home/tt/Documents/ftp_client/build/CMakeFiles/ftp_client.dir

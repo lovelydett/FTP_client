@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/tt/Documents/ftp_client/src/main.c
+stdio.h
+-
+stdlib.h
+-
+netdb.h
+-
+errno.h
+-
+fcntl.h
+-
+string.h
+-
+limits.h
+-
+sys/select.h
+-
+sys/socket.h
+-
+sys/types.h
+-
+sys/stat.h
+-
+sys/ioctl.h
+-
+
