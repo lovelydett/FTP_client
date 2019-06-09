@@ -1,1 +1,1 @@
-/usr/bin/cc     CMakeFiles/ftp_client.dir/src/main.c.o  -o ftp_client  -L/home/tt/Documents/ftp_client/./lib 
+/usr/bin/cc     CMakeFiles/ftp_client.dir/src/main.c.o  -o ftp_client  -L/home/tt/Documents/FTP_client/./lib 

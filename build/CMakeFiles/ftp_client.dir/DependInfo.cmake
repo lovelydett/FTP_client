@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_C
-  "/home/tt/Documents/ftp_client/src/main.c" "/home/tt/Documents/ftp_client/build/CMakeFiles/ftp_client.dir/src/main.c.o"
+  "/home/tt/Documents/FTP_client/src/main.c" "/home/tt/Documents/FTP_client/build/CMakeFiles/ftp_client.dir/src/main.c.o"
   )
 set(CMAKE_C_COMPILER_ID "GNU")
 

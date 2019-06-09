@@ -6,7 +6,7 @@
 
 #IncludeRegexTransform: 
 
-/home/tt/Documents/ftp_client/src/main.c
+/home/tt/Documents/FTP_client/src/main.c
 stdio.h
 -
 stdlib.h
@@ -19,6 +19,8 @@ fcntl.h
 -
 string.h
 -
+unistd.h
+-
 limits.h
 -
 sys/select.h
@@ -30,5 +32,9 @@ sys/types.h
 sys/stat.h
 -
 sys/ioctl.h
+-
+netinet/in.h
+-
+arpa/inet.h
 -
 

@@ -5,6 +5,7 @@
 #include	<errno.h>	/* for definition of errno */
 #include 	<fcntl.h>	//@tt:for file operates
 #include 	<string.h>
+#include 	<unistd.h>
 #include 	<limits.h>
 //@tt: for use of select()
 #include    <sys/select.h>  
@@ -12,7 +13,8 @@
 #include 	<sys/types.h>
 #include 	<sys/stat.h>
 #include 	<sys/ioctl.h>
-
+#include	<netinet/in.h>
+#include	<arpa/inet.h>
 
 /* define macros*/
 #define MAXBUF	1024
@@ -92,6 +94,8 @@ int cliopen(char *host, int port)
         printf("error: enable to open socket at: cliopen\n");
         return -1;
     }
+
+
     struct hostent *ht = NULL;//@tt: used for acquire servaddr
 	char hostname[128];
 	hostname[127] = 0;
@@ -99,17 +103,22 @@ int cliopen(char *host, int port)
     //     puts(hostname);
     // else
     //     perror("gethostname");
-	ht = gethostbyname(host);
-    if(NULL == ht)
-    {
-        printf("error: enable to get host by name: %s at: cliopen\n",host);
-        return -1;
-    }
+	// ht = gethostbyname(host);
+    // if(NULL == ht)
+    // {
+    //     printf("error: enable to get host by name: %s at: cliopen\n",host);
+    //     return -1;
+    // }
     memset(&servaddr,0,sizeof(struct sockaddr_in));//@tt: clear servaddr
-    //memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
-	memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
-    servaddr.sin_port = htons(port);//@tt:transfer to big-endian
+    
+	//memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
+	//memcpy(&servaddr.sin_addr.s_addr,(in_addr_t*)ht->h_addr_list,ht->h_length);//@tt: get serveraddr
+    
+	servaddr.sin_addr.s_addr = inet_addr(host);
+	servaddr.sin_port = htons(port);//@tt:transfer to big-endian
 	servaddr.sin_family = AF_INET;
+	
+	
 	nRet = connect(socketCmd,(struct sockaddr*)&servaddr,sizeof(servaddr));//@tt:force to transfer to sockaddr*
 	if(0!=nRet)
 	{
@@ -366,10 +375,12 @@ void ftp_list(int sockfd)
 	{
 		/* data to read from socket */
 		if ( (nread = recv(sockfd, rbuf1, MAXBUF, 0)) < 0)
+		{
 			printf("recv error\n");
+			break;
+		}
 		else if (nread == 0)
 			break;
-
 		if (write(STDOUT_FILENO, rbuf1, nread) != nread)
 			printf("send error to stdout\n");
 	}
@@ -405,7 +416,7 @@ int	ftp_get(int sck, char *pDownloadFileName_s)
 		if(0>readCount)
 		{
 			printf("error: unable to read from sck:%d\n",sck);
-			continue;
+			break;
 		}
 		nRet = write(file_fd,rbuf1,readCount);
 		if(nRet!=readCount)
@@ -440,7 +451,7 @@ int ftp_put (int sck, char *pUploadFileName_s)
 	int readCount;
 	while(1)
 	{
-		readCount = read(file_fd,wbuf1,MAXBUF,0);
+		readCount = read(file_fd,wbuf1,MAXBUF);
 		if(0 == readCount)
 		{
 			printf("reading finished from file:%s\n",pUploadFileName_s);
