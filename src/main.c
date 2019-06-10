@@ -117,7 +117,7 @@ int cliopen(char *host, int port)
 	servaddr.sin_addr.s_addr = inet_addr(host);
 	servaddr.sin_port = htons(port);//@tt:transfer to big-endian
 	servaddr.sin_family = AF_INET;
-	
+	printf("connecting to server:%s\n",host);
 	
 	nRet = connect(socketCmd,(struct sockaddr*)&servaddr,sizeof(servaddr));//@tt:force to transfer to sockaddr*
 	if(0!=nRet)
@@ -125,7 +125,7 @@ int cliopen(char *host, int port)
 		printf("error in tcp connection: nRet = %d \n",nRet);
 		return -1;
 	}
-	printf("\n----------tcp connection established---------- \n");
+	printf("----------tcp connection established---------- \n");
 	return socketCmd;
 }
 
@@ -137,7 +137,10 @@ int cliopen(char *host, int port)
 int    strtosrv(char *str, char *host)
 {
 	unsigned int serverAdd[6];
-	sscanf(str,"%d,%d,%d,%d,%d,%d",&serverAdd[0],&serverAdd[1],&serverAdd[2],&serverAdd[3],&serverAdd[4],&serverAdd[5]);  
+	int temp_int;
+	char temp_str[128];
+	char temp;
+	sscanf(str,"%d %s %s %s %c%d,%d,%d,%d,%d,%d%c",&temp_int,temp_str,temp_str,temp_str,&temp,&serverAdd[0],&serverAdd[1],&serverAdd[2],&serverAdd[3],&serverAdd[4],&serverAdd[5],&temp);  
 	memset(host,0,strlen(host));
 	sprintf(host,"%d.%d.%d.%d",serverAdd[0],serverAdd[1],serverAdd[2],serverAdd[3]);
 	return serverAdd[4]*256 + serverAdd[5];
@@ -302,6 +305,7 @@ void cmd_tcp(int sockfd)
 
 			/* open data connection*/
 			if (strncmp(rbuf, "227", 3) == 0) {
+				//printf("A: %s\n",rbuf);
 				port = strtosrv(rbuf, host);
 				fd = cliopen(host, port);
 				switch (nextCmdMode)
@@ -384,7 +388,7 @@ void ftp_list(int sockfd)
 		if (write(STDOUT_FILENO, rbuf1, nread) != nread)
 			printf("send error to stdout\n");
 	}
-
+	
 	if (close(sockfd) < 0)
 		printf("close error\n");
 }
@@ -416,7 +420,6 @@ int	ftp_get(int sck, char *pDownloadFileName_s)
 		if(0>readCount)
 		{
 			printf("error: unable to read from sck:%d\n",sck);
-			break;
 		}
 		nRet = write(file_fd,rbuf1,readCount);
 		if(nRet!=readCount)
