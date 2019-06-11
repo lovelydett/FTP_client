@@ -1,1 +1,1 @@
-/usr/bin/cc     CMakeFiles/ftp_client.dir/src/main.c.o  -o ftp_client  -L/home/tt/Documents/FTP_client/./lib 
+/usr/bin/c++    -std=c++11 -pthread -O0 -g   CMakeFiles/ftp_client.dir/src/main.cpp.o  -o ftp_client 

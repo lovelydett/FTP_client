@@ -7,6 +7,7 @@
 #include 	<string.h>
 #include 	<unistd.h>
 #include 	<limits.h>
+#include    <thread>
 //@tt: for use of select()
 #include    <sys/select.h>  
 #include 	<sys/socket.h>
@@ -251,7 +252,6 @@ void cmd_tcp(int sockfd)
 				if (strncmp(rbuf, "get", 3) == 0) 
 				{
 					sprintf(wbuf, "%s", "PASV\n");
-					write(sockfd, wbuf, 5);
 					memset(fileName,'\0',strlen(fileName));
 					sscanf(rbuf,"get %s",fileName);
 					sprintf(wbuf1, "RETR %s", fileName);
@@ -266,7 +266,6 @@ void cmd_tcp(int sockfd)
 				if (strncmp(rbuf, "put", 3) == 0) 
 				{
 					sprintf(wbuf, "%s", "PASV\n");
-					write(sockfd, wbuf, 5);
 					memset(fileName,'\0',strlen(fileName));
 					sscanf(rbuf,"put %s",fileName);
 					sprintf(wbuf1, "STOR %s", fileName);//@tt:set next cmd line
@@ -288,14 +287,17 @@ void cmd_tcp(int sockfd)
 		/* data to read from socket */
 		if (FD_ISSET(sockfd, &rset)) {
 			if ( (nread = recv(sockfd, rbuf, MAXBUF, 0)) < 0)
+			{
 				printf("recv error\n");
+				continue;
+			}
 			else if (nread == 0)
-				break;
-
+				continue;
+			write(STDOUT_FILENO, rbuf, strlen(rbuf));
 			/* set replycode and wait for user's input */
 			if (strncmp(rbuf, "220", 3)==0 || strncmp(rbuf, "530", 3)==0){
-				strcat(rbuf,  "your name: ");
-				nread += 12;
+				write(STDOUT_FILENO,"your name: ",strlen("your name: "));
+				//nread += 12;
 				replycode = USERNAME;
 			}
 
@@ -318,19 +320,25 @@ void cmd_tcp(int sockfd)
 					ftp_list(fd);
 					break;
 				case GET:
+				{
 					if(write(sockfd, wbuf1, strlen(wbuf1))!=strlen(wbuf1))
 					{
 						printf("error: failed to send cmd to serversock");
 					}
-					ftp_get(fd,fileName);
+					std::thread *t = new std::thread(ftp_get,fd,fileName);
+					t->detach();
 					break;
+				}
 				case PUT:
+				{
 					if(write(sockfd, wbuf1, strlen(wbuf1))!=strlen(wbuf1))
 					{
 						printf("error: failed to send cmd to serversock");
 					}
-					ftp_put(fd,fileName);
-					break;				
+					std::thread *t = new std::thread(ftp_put,fd,fileName);
+					t->detach();
+					break;	
+				}			
 				default:
 					break;
 				}
@@ -338,7 +346,7 @@ void cmd_tcp(int sockfd)
 			}
 			if(strncmp(rbuf,"331",3) == 0)
 			{
-				strcat(rbuf,"your password:");
+				write(STDOUT_FILENO,"your password:",strlen("your password:"));
 				nread += 16;
  				replycode = PASSWORD;
 			}
@@ -359,8 +367,7 @@ void cmd_tcp(int sockfd)
  				replycode = CLOSEDATA;
 			}
 			/* start data transfer */
-			if (write(STDOUT_FILENO, rbuf, nread) != nread)
-				printf("write error to stdout\n");
+
 		}
 	}
 
@@ -420,6 +427,7 @@ int	ftp_get(int sck, char *pDownloadFileName_s)
 		if(0>readCount)
 		{
 			printf("error: unable to read from sck:%d\n",sck);
+			break;
 		}
 		nRet = write(file_fd,rbuf1,readCount);
 		if(nRet!=readCount)
@@ -463,7 +471,7 @@ int ftp_put (int sck, char *pUploadFileName_s)
 		if(0>readCount)
 		{
 			printf("error: unable to read from file:%s\n",pUploadFileName_s);
-			continue;
+			break;
 		}
 		nRet = write(sck,wbuf1,readCount);
 		if(nRet!=readCount)
